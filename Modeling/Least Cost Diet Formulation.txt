@@ -1,0 +1,229 @@
+*Coding example to balance a ration using the program GAMS
+
+
+
+*Step 1: Use the "sets" command to define and populate a series of sets representing
+
+*the nutrients of interest, feeds available and animal groups
+
+
+
+sets    f        /ah        alfalfa hay
+
+                 gh        grass hay
+
+                 cg        corn grain
+
+                 ddg        dried distillers grains
+
+                 sbm        soybean meal
+
+                 tms        trace mineralized salt
+
+                 ls        limestone
+
+                 dic        dicalcium phosphate/
+
+        n        /me        metabolizable energy
+
+                 nem        net energy for maintenance
+
+                 neg        net energy for gain
+
+                 cp        crude protein
+
+                 ca        calcium
+
+                 phos        phosphorus
+
+                 cost        cost/
+
+        a        /gs        growing steer
+
+                 fs        finishing steer/
+
+
+
+*Step 2: Use a table to input the nutrient requirement for both types of steers
+
+
+
+table req(a,n) nutrients required by animal groups
+
+           me        nem        neg        cp           ca        phos
+
+gs        2.03       1.6        0.6        13.5        1.20        0.60
+
+fs        2.5        1.8        0.8        11.5        1.2        0.60
+
+;
+
+
+
+*Step 3: Use a table to describe the nutrients provided by feedstuffs
+
+
+
+table nut(f,n) nutrients provided by feedstuffs
+
+        me        nem     neg      cp       ca      phos     cost
+
+ah       1        1        1        1        1        1        1
+
+gh       1        1        1        1        1        1        1
+
+cg       1        1        1        1        1        1        1
+
+ddg      1        1        1        1        1        1        1
+
+sbm      1        1        1        1        1        1        1
+
+tms      1        1        1        1        1        1        1
+
+ls       1        1        1        1        1        1        1
+
+dic      1        1        1        1        1        1        1
+
+;
+
+
+
+*Step 4: Specify the required minimum Ca to P ratio in the diet
+
+parameters
+
+                 ca2p        calcium to phosphorus ratio                  /2/
+
+                 cfinish        cost recieved on finished cattle         /1.1/
+
+
+
+*Step 5: Specify the starting and finishing weights of the cattle groups
+
+parameters      sw(a)        starting weight         /gs        320
+
+                                                      fs        400/
+
+                fw(a)        finishing weight        /gs        400
+
+                                                      fs        590/
+
+                SRW(a)        standard reference weight        /gs        462
+
+                                                                fs        432/
+
+
+
+*Step 5: Predict dry matter intake as a percentage of body weight and calculate
+
+* equilvalent shrunk body weight
+
+parameters       maxDM(a)
+
+                 aw(a)
+
+                 Eqsbw(a);
+
+
+
+maxDM('fs') = 480*0.025;
+
+maxDM('gs') = 420*0.025;
+
+aw(a) = (fw(a)+sw(a))/2;
+
+
+
+Eqsbw(a) = (0.96*aw(a))*(SRW(a)/(0.96*fw(a)));
+
+
+
+*Step 6: Declare the variables to be used in the optimization
+
+
+
+variables
+
+        DMI(a,f)        dry matter intake
+
+        DMm(a)                dry matter intake for maintenance
+
+        NEgaval(a)        net energy for gain available for growth
+
+        adg(a)                average daily gain
+
+        dof(a)                days on feed
+
+        fcost                feed costs
+
+        inc                income
+
+        IOFC                income over feed costs;
+
+
+
+*Step 7: Name the equations to be used in the optimization
+
+
+
+equations
+
+        intake(a)                intake restriction
+
+        enbal(a)                determining DMI for maintenance
+
+        enbal1(a)                determining NEg remaining for gain
+
+        padg(a)                        predict average daily gain
+
+        tfin(a)                        predict time to finish
+
+        cpbal(a)                protein requirements
+
+        cabal(a)                calcium requirements
+
+        phosbal(a)                phosphorus requirements
+
+        capbal(a)                calcium to phosphorus ratio
+
+        econ1                        costs of diets
+
+        econ2                        prices received for cattle
+
+        econ3                    calculate income over variable costs
+
+;
+
+
+
+*Step 8: write out the equation forms
+
+intake(a)..        sum(f, DMI(a,f)) =l= maxDM(a);
+
+cpbal(a)..        sum(f,DMI(a,f)*nut(f,'cp')) =g= req(a,'cp');
+
+cabal(a)..        sum(f,DMI(a,f)*nut(f,'ca')) =g= req(a,'ca');
+
+phosbal(a)..        sum(f,DMI(a,f)*nut(f,'phos')) =g= req(a,'phos');
+
+capbal(a)..        sum(f,DMI(a,f)*nut(f,'ca')) =g= ca2p*sum(f,DMI(a,f)*nut(f,'phos'));
+
+enbal(a)..        (sum(f,DMI(a,f)*nut(f,'nem'))-req(a,'nem')) =e= DMm(a)*sum(f,DMI(a,f));
+
+enbal1(a)..        (sum(f,DMI(a,f))-DMm(a))*(sum(f,DMI(a,f)*nut(f,'neg'))) =e= Negaval(a);
+
+econ1..                sum((a,f),DMI(a,f)*nut(f,'cost')) =e= fcost;
+
+
+
+*Step 9: define the model
+
+
+
+model dietbal   /all/
+
+
+
+*Step 10: specify the solve statment
+
+solve dietbal using lp maximizing fcost;
